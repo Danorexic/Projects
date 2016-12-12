@@ -87,9 +87,9 @@ void sendTeperatureTS(float tempf, float hum)
    Serial.println("WiFi Client connected ");
    
    String postStr = apiKey;
-   postStr += "&field3="; //1+2 are Room. 3+4 are Kitchen
+   postStr += "&field1="; //1+2 are Room. 3+4 are Kitchen
    postStr += String(tempf);
-   postStr += "&field4=";
+   postStr += "&field2=";
    postStr += String(hum);
    postStr += "\r\n\r\n";
    
