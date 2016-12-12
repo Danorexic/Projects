@@ -2,6 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <DHT.h>;
 #include <Wire.h>
+#include <WiFiUDP.h>
 
 #define wifi_ssid "The Cosmos"
 #define wifi_password "jeepcherokee"
@@ -10,6 +11,7 @@
 #define hum_topic "sensors/hum"
 
 WiFiClient espClient;
+WiFiUDP listener;
 
 
 //Constants
@@ -56,11 +58,19 @@ void setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  listener.begin(8266);
+
+  Serial.print("Sketch size: ");
+  Serial.println(ESP.getSketchSize());
+  Serial.print("Free size: ");
+  Serial.println(ESP.getFreeSketchSpace());
 }
 
 
 void setup() {
   Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
   setup_wifi();
   Serial.print("Wifi Setup");
   dht.begin();
@@ -116,5 +126,26 @@ void publish_temp() {
 }
 void loop() {
   publish_temp();
+  int cb = listener.parsePacket();
+  if (cb) {
+    IPAddress remote = listener.remoteIP();
+    int cmd  = listener.parseInt();
+    int port = listener.parseInt();
+    int sz   = listener.parseInt();
+    Serial.println("Got packet");
+    Serial.printf("%d %d %d\r\n", cmd, port, sz);
+    WiFiClient cl;
+    if (!cl.connect(remote, port)) {
+      Serial.println("failed to connect");
+      return;
+    }
+
+    listener.stop();
+
+    if (!ESP.updateSketch(cl, sz)) {
+      Serial.println("Update failed");
+    }
   }
+  delay(100);
+}
 
