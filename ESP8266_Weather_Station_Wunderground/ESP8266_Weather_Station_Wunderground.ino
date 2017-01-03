@@ -1,27 +1,15 @@
-/*
-   PIR sensor tester
-*/
+
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <Servo.h>
 #include <DHT.h>;
 #include <SFE_BMP180.h>
 #include <Wire.h>
-
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+ 
 #define wifi_ssid "The Cosmos"
 #define wifi_password "jeepcherokee"
-//What's going on here?
-//#define mqtt_server "m10.cloudmqtt.com"
-#define mqtt_server "104.236.222.145"
-#define mqtt_user "Danny"
-#define mqtt_password "vash9088"
-
-#define temp_topic "sensors/temp"
-#define hum_topic "sensors/hum"
 
 WiFiClient espClient;
-PubSubClient client(espClient);
-Servo myservo;
 
 //Constants
 #define DHTPIN 5     // what pin we're connected to
@@ -74,40 +62,43 @@ void setup_wifi() {
     delay(500);
     Serial.print(".");
   }
+  
+ //OTA update setup 
+ ArduinoOTA.setHostname("esp8266-outside-weather");
 
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  
+  ArduinoOTA.begin();
+  
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 }
 
-void callback(char* topic, byte* payload, unsigned int length){
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  for (int i=0;i<length;i++) {
-    Serial.print((char)payload[i]);
-    Serial.write((char)payload[i]);
-  }
-  Serial.println();
-  myservo.write(90);
-  delay(100);
-  myservo.write(95);
-  
-  
-}
 
 void setup() {
-  myservo.attach(4);
-  myservo.write(95);
+
   Serial.begin(115200);
+  Serial.println("Booting");
+  WiFi.mode(WIFI_STA);
   setup_wifi();
-  //client.setServer(mqtt_server, 17878);
-  client.setServer(mqtt_server, 1883);
-  client.subscribe(temp_topic);
-  Serial.print("Subsribed to topic");
-  client.setCallback(callback);
-  Serial.print("Callback set");
   dht.begin();
   delay(1500);
   if (pressure.begin())
@@ -119,30 +110,6 @@ void setup() {
 
     Serial.println("BMP180 init fail\n\n");
     while(1); // Pause forever.
-  }
-}
-
-
-
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    // If you do not want to use a username and password, change next line to
-    //if (client.connect("ESP8266Client")) {
-    //if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
-    if (client.connect("ESP8266Client")) {  
-      Serial.println("connected");
-      client.subscribe(temp_topic);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
   }
 }
 
@@ -210,24 +177,12 @@ void publish_temp() {
     temp = dht.readTemperature();
     temp_f = (temp * 9.0)/5.0 + 32.0;
     pressure_TS = (p0*0.0295333727);
-
-    temp_str = String(temp_f); //converting ftemp (the float variable above) to a string 
-    temp_str.toCharArray(tempchar, temp_str.length() + 1); //packaging up the data to publish to mqtt whoa...
-
-    hum_str = String(hum); //converting Humidity (the float variable above) to a string
-    hum_str.toCharArray(humchar, hum_str.length() + 1); //packaging up the data to publish to mqtt whoa...
-
-
-    client.publish(temp_topic, tempchar);
-    client.publish(hum_topic, humchar);
     publish_WU();
     sendTeperatureTS(temp_f, hum, pressure_TS);
     delay(60000);
 }
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
+  ArduinoOTA.handle();
   // Begin BMP180 stuff
   char status;
   // double T,P,p0,a; moved to top of file
@@ -335,6 +290,6 @@ void loop() {
   else Serial.println("error starting temperature measurement\n");
 
   publish_temp();
-  client.loop();
+
   }
 
